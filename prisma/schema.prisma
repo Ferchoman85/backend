@@ -1,0 +1,137 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  password     String
+  name         String
+  role         String        @default("MERCADERISTA") // "ADMIN" or "MERCADERISTA"
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  merchandiser Merchandiser?
+}
+
+model Merchandiser {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phone     String
+  routes    Route[]
+  visits    Visit[]
+}
+
+model Customer {
+  id        String          @id @default(uuid())
+  code      String          @unique
+  name      String
+  address   String
+  latitude  Float
+  longitude Float
+  phone     String
+  contact   String
+  isActive  Boolean         @default(true)
+  routes    RouteCustomer[]
+  visits    Visit[]
+}
+
+model Article {
+  id             String       @id @default(uuid())
+  code           String       @unique
+  name           String
+  brand          String
+  category       String
+  suggestedPrice Float
+  isActive       Boolean      @default(true)
+  inventories    Inventory[]
+  prices         Price[]
+}
+
+model Route {
+  id             String          @id @default(uuid())
+  name           String
+  merchandiserId String
+  merchandiser   Merchandiser    @relation(fields: [merchandiserId], references: [id])
+  customers      RouteCustomer[]
+  createdAt      DateTime        @default(now())
+}
+
+model RouteCustomer {
+  id        String   @id @default(uuid())
+  routeId   String
+  route     Route    @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  customerId String
+  customer  Customer @relation(fields: [customerId], references: [id])
+  order     Int
+  visitDays String   // e.g. "Lunes,Miércoles"
+}
+
+model Visit {
+  id             String       @id @default(uuid())
+  customerId     String
+  customer       Customer     @relation(fields: [customerId], references: [id])
+  merchandiserId String
+  merchandiser   Merchandiser @relation(fields: [merchandiserId], references: [id])
+  startTime      DateTime
+  endTime        DateTime?
+  startLatitude  Float
+  startLongitude Float
+  endLatitude    Float?
+  endLongitude   Float?
+  observations   String?
+  signatureUrl   String?
+  isSynced       Boolean      @default(true)
+  photos         VisitPhoto[]
+  inventories    Inventory[]
+  prices         Price[]
+  exhibitions    Exhibition?
+}
+
+model VisitPhoto {
+  id        String    @id @default(uuid())
+  visitId   String
+  visit     Visit     @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  type      String    // "ANTES" or "DESPUES"
+  photoUrl  String
+  latitude  Float
+  longitude Float
+  takenAt   DateTime  @default(now())
+}
+
+model Inventory {
+  id           String  @id @default(uuid())
+  visitId      String
+  visit        Visit   @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  articleId    String
+  article      Article @relation(fields: [articleId], references: [id])
+  stockQty     Int
+  warehouseQty Int
+  observations String?
+}
+
+model Price {
+  id           String  @id @default(uuid())
+  visitId      String
+  visit        Visit   @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  articleId    String
+  article      Article @relation(fields: [articleId], references: [id])
+  foundPrice   Float
+  observations String?
+}
+
+model Exhibition {
+  id                String  @id @default(uuid())
+  visitId           String  @unique
+  visit             Visit   @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  productExhibited  Boolean @default(false)
+  productOutOfStock Boolean @default(false)
+  popInstalled      Boolean @default(false)
+  competitorPresent Boolean @default(false)
+}
