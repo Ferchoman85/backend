@@ -89,6 +89,44 @@ router.post('/', auth_1.authenticateJWT, (0, auth_1.requireRole)(['ADMIN']), asy
         res.status(500).json({ error: 'Error al crear la ruta' });
     }
 });
+// UPDATE ROUTE WITH CUSTOMERS (Admin Only)
+router.put('/:id', auth_1.authenticateJWT, (0, auth_1.requireRole)(['ADMIN']), async (req, res) => {
+    const { id } = req.params;
+    const { name, merchandiserId, customers } = req.body;
+    if (!name || !merchandiserId || !customers || !Array.isArray(customers)) {
+        return res.status(400).json({ error: 'Faltan campos obligatorios o formato inválido' });
+    }
+    try {
+        await db_1.default.$transaction(async (tx) => {
+            // 1. Update Route name and merchandiser
+            await tx.route.update({
+                where: { id },
+                data: {
+                    name,
+                    merchandiserId
+                }
+            });
+            // 2. Delete all existing RouteCustomers for this route
+            await tx.routeCustomer.deleteMany({
+                where: { routeId: id }
+            });
+            // 3. Re-create RouteCustomers
+            const routeCustomersData = customers.map((c) => ({
+                routeId: id,
+                customerId: c.customerId,
+                order: parseInt(c.order),
+                visitDays: Array.isArray(c.visitDays) ? c.visitDays.join(',') : c.visitDays
+            }));
+            await tx.routeCustomer.createMany({
+                data: routeCustomersData
+            });
+        });
+        res.json({ message: 'Ruta actualizada exitosamente' });
+    }
+    catch (error) {
+        res.status(500).json({ error: 'Error al actualizar la ruta' });
+    }
+});
 // DELETE ROUTE (Admin Only)
 router.delete('/:id', auth_1.authenticateJWT, (0, auth_1.requireRole)(['ADMIN']), async (req, res) => {
     const { id } = req.params;
