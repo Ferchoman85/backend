@@ -38,11 +38,18 @@ if (!fs.existsSync(uploadDir)) {
 // Serve uploaded photos statically
 app.use('/uploads', express.static(uploadDir));
 
-// Serve the admin panel from the /panel directory
-const panelDir = path.join(__dirname, '../../panel');
-if (fs.existsSync(panelDir)) {
+// Serve the admin panel. Railway may deploy only the backend directory, so
+// prefer the bundled backend/panel copy and keep the repo-level panel as fallback.
+const panelDir = [
+  path.join(__dirname, '../panel'),
+  path.join(__dirname, '../../panel'),
+].find((candidate) => fs.existsSync(candidate));
+
+if (panelDir) {
   app.use('/panel', express.static(panelDir));
   console.log(`Admin panel available at http://localhost:${PORT}/panel`);
+} else {
+  console.warn('Admin panel directory not found. /panel will be unavailable.');
 }
 
 // API Routes
