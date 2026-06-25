@@ -158,7 +158,22 @@ router.post('/sync', authenticateJWT, async (req: AuthRequest, res: Response) =>
 // GET LIST OF ALL VISITS (Admin Only)
 router.get('/', authenticateJWT, async (req: AuthRequest, res: Response) => {
   try {
+    const filter: any = {};
+
+    if (req.user?.role === 'MERCADERISTA') {
+      const merchandiser = await prisma.merchandiser.findUnique({
+        where: { userId: req.user.id }
+      });
+
+      if (!merchandiser) {
+        return res.json([]);
+      }
+
+      filter.merchandiserId = merchandiser.id;
+    }
+
     const visits = await prisma.visit.findMany({
+      where: filter,
       include: {
         customer: true,
         merchandiser: {

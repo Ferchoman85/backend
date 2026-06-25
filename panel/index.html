@@ -320,6 +320,20 @@
       z-index: 50;
     }
 
+    .mobile-menu-btn {
+      width: 44px;
+      height: 44px;
+      border: none;
+      border-radius: 10px;
+      background: var(--navy);
+      color: var(--white);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
     .topbar-title {
       font-size: 20px;
       font-weight: 800;
@@ -651,11 +665,42 @@
     .page { display: none; }
     .page.active { display: block; }
 
+    .sidebar-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15,23,42,0.45);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+      z-index: 90;
+    }
+
+    .sidebar-overlay.show {
+      opacity: 1;
+      pointer-events: all;
+    }
+
     /* Responsive */
     @media (max-width: 768px) {
-      .sidebar { transform: translateX(-100%); }
+      .sidebar {
+        transform: translateX(-100%);
+        z-index: 110;
+        box-shadow: 18px 0 40px rgba(15,23,42,0.35);
+      }
       .sidebar.open { transform: translateX(0); }
       .main-content { margin-left: 0; }
+      .topbar {
+        padding: 0 16px;
+        gap: 14px;
+        justify-content: flex-start;
+      }
+      .mobile-menu-btn { display: inline-flex; }
+      .topbar-title { font-size: 24px; }
+      .topbar-actions {
+        margin-left: auto;
+        gap: 8px;
+      }
+      .page-content { padding: 24px 16px; }
       .stats-grid { grid-template-columns: 1fr 1fr; }
       .form-row { grid-template-columns: 1fr; }
     }
@@ -739,10 +784,18 @@
         </div>
       </div>
     </aside>
+    <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
 
     <!-- Main Content -->
     <main class="main-content">
       <header class="topbar">
+        <button class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Abrir menú">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+            <line x1="4" y1="6" x2="20" y2="6"></line>
+            <line x1="4" y1="12" x2="20" y2="12"></line>
+            <line x1="4" y1="18" x2="20" y2="18"></line>
+          </svg>
+        </button>
         <div class="topbar-title" id="topbar-title">Dashboard</div>
         <div class="topbar-actions" id="topbar-actions"></div>
       </header>
@@ -815,6 +868,7 @@ function doLogout() {
   authToken = null; currentUser = null;
   localStorage.removeItem('integra_token');
   localStorage.removeItem('integra_user');
+  closeSidebar();
   document.getElementById('auth-screen').style.display = 'flex';
   document.getElementById('app-screen').style.display = 'none';
 }
@@ -849,6 +903,18 @@ function initApp() {
   navigateTo('dashboard');
 }
 
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+  sidebar.classList.toggle('open');
+  overlay.classList.toggle('show', sidebar.classList.contains('open'));
+}
+
+function closeSidebar() {
+  document.getElementById('sidebar')?.classList.remove('open');
+  document.getElementById('sidebar-overlay')?.classList.remove('show');
+}
+
 const NAV_ADMIN = [
   { id:'dashboard', label:'Dashboard', icon:'📊' },
   { id:'merchandisers', label:'Mercaderistas', icon:'👥' },
@@ -874,6 +940,7 @@ function buildNav() {
 }
 
 function navigateTo(page) {
+  closeSidebar();
   currentPage = page;
   document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
@@ -905,6 +972,10 @@ async function loadPage(page) {
 
 // ============ DASHBOARD ============
 async function renderDashboard(el) {
+  if (currentUser.role !== 'ADMIN') {
+    return renderMerchandiserDashboard(el);
+  }
+
   const data = await apiFetch('/dashboard/admin');
   const compliance = data.complianceList || [];
   const compPct = data.plannedVisitsCount > 0
@@ -975,6 +1046,99 @@ async function renderDashboard(el) {
             }).join('')}</div>`
         }
       </div>
+    </div>
+  `;
+}
+
+async function renderMerchandiserDashboard(el) {
+  const [routes, visits] = await Promise.all([
+    apiFetch('/routes'),
+    apiFetch('/visits')
+  ]);
+
+  const today = new Date();
+  const daysOfWeek = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  const todayName = daysOfWeek[today.getDay()];
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+
+  const assignedCustomers = routes.flatMap(r => r.customers || []);
+  const scheduledToday = assignedCustomers.filter(c => (c.visitDays || []).includes(todayName));
+  const visitsToday = visits.filter(v => {
+    const start = new Date(v.startTime);
+    return start >= startOfToday && start < endOfToday;
+  });
+  const completedToday = visitsToday.filter(v => v.endTime).length;
+  const pendingToday = Math.max(0, scheduledToday.length - completedToday);
+  const compliance = scheduledToday.length > 0
+    ? Math.min(100, Math.round((completedToday / scheduledToday.length) * 100))
+    : 100;
+  const barColor = compliance >= 80 ? 'var(--green)' : compliance >= 50 ? 'var(--gold)' : 'var(--red)';
+
+  document.getElementById('topbar-title').textContent = 'Mi Panel';
+  document.getElementById('topbar-actions').innerHTML = '';
+
+  el.innerHTML = `
+    <div class="stats-grid">
+      <div class="stat-card gold">
+        <div class="stat-icon gold">🗺️</div>
+        <div class="stat-label">Rutas Asignadas</div>
+        <div class="stat-value" style="color:var(--gold)">${routes.length}</div>
+      </div>
+      <div class="stat-card blue">
+        <div class="stat-icon blue">🏪</div>
+        <div class="stat-label">Clientes en Ruta</div>
+        <div class="stat-value" style="color:var(--blue)">${assignedCustomers.length}</div>
+      </div>
+      <div class="stat-card green">
+        <div class="stat-icon green">✅</div>
+        <div class="stat-label">Visitas Hoy</div>
+        <div class="stat-value" style="color:var(--green)">${completedToday}</div>
+      </div>
+      <div class="stat-card red">
+        <div class="stat-icon red">📅</div>
+        <div class="stat-label">Pendientes Hoy</div>
+        <div class="stat-value" style="color:var(--red)">${pendingToday}</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:24px">
+      <div class="card-header">
+        <div>
+          <div class="card-title">📈 Mi Cumplimiento de Hoy</div>
+          <div class="card-subtitle">${completedToday} de ${scheduledToday.length} visitas · ${todayName}</div>
+        </div>
+        <span class="badge ${compliance >= 80 ? 'badge-green' : compliance >= 50 ? 'badge-gold' : 'badge-red'}">${compliance}%</span>
+      </div>
+      <div style="padding:24px">
+        <div class="progress-bar">
+          <div class="progress-fill" style="width:${compliance}%;background:${barColor}"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">🏪 Clientes Programados Hoy</div>
+          <div class="card-subtitle">${scheduledToday.length} cliente${scheduledToday.length !== 1 ? 's' : ''} para ${todayName}</div>
+        </div>
+      </div>
+      ${scheduledToday.length === 0 ? `<div class="empty-state"><div class="empty-state-icon">📅</div><div class="empty-state-title">No tienes visitas programadas para hoy</div></div>` :
+      `<table>
+        <thead><tr><th>Orden</th><th>Cliente</th><th>Dirección</th><th>Contacto</th><th>Teléfono</th></tr></thead>
+        <tbody>
+          ${scheduledToday.map(c => `
+            <tr>
+              <td><span class="badge badge-gold">${c.order}</span></td>
+              <td><strong>${c.name}</strong><br><span style="font-size:11px;color:var(--slate-400)">${c.code}</span></td>
+              <td style="color:var(--slate-500);font-size:13px">${c.address}</td>
+              <td>${c.contact || '—'}</td>
+              <td>${c.phone || '—'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>`}
     </div>
   `;
 }

@@ -10,7 +10,17 @@ router.get('/', authenticateJWT, async (req: AuthRequest, res: Response) => {
     const { merchandiserId } = req.query;
 
     const filter: any = {};
-    if (merchandiserId) {
+    if (req.user?.role === 'MERCADERISTA') {
+      const merchandiser = await prisma.merchandiser.findUnique({
+        where: { userId: req.user.id }
+      });
+
+      if (!merchandiser) {
+        return res.json([]);
+      }
+
+      filter.merchandiserId = merchandiser.id;
+    } else if (merchandiserId) {
       filter.merchandiserId = merchandiserId as string;
     }
 
